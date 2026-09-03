@@ -1,0 +1,22 @@
+# Input data - not redistributed
+Video.mp4
+*.mp4
+Path 2.csv
+*.csv
+
+# Derived artefacts - regenerate by running the pipeline
+data/
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
