@@ -1259,6 +1259,60 @@ de-wobbled, against a ~44 px tube width. They separate in the curved mid
 section, on the return leg, by a median of 18.9 px. Both halves of that sentence
 matter, and the aggregate median alone was hiding the second one.
 
+## U1 — the per-leg wall offset, tested and rejected
+
+T10 showed the two legs are visibly displaced within the lumen in the curved
+mid section, and noted that K1-K5 had rejected a *rotating* radial offset while
+never testing a *quasi-static, per-leg* one. That model:
+
+    X(s, leg) = C(s) + r * ( cos(theta_leg) N1(s) + sin(theta_leg) N2(s) )
+
+with `r` constant and the physical hypothesis theta_return = theta_outbound +
+pi. Fitted on the OUTBOUND leg only, then used to predict the RETURN leg it had
+never seen (`src/u1_wallhug.py`). Fit: r = 0.50 mm (3.2 px), theta = 158 deg,
+evidence gain +31.6 nats on the fitting leg. `r` did not hit the grid bound
+(3.0 mm vs a ~3.4 mm tube radius), so the fit stayed physical.
+
+| model | outbound resid | RETURN resid | return >30px | log Z |
+|---|---|---|---|---|
+| centerline (r=0) | **1.85 px** | **6.92 px** | 8.5% | -7714 |
+| same wall (theta_ret = theta_out) | 3.46 px | 5.50 px | 7.3% | **-7606** |
+| opposite wall (theta_ret = theta_out + pi) | 3.46 px | 8.55 px | 9.9% | -7774 |
+
+**Rejected, on three counts.**
+
+1. **The out-of-sample prediction fails.** The opposite-wall model makes the
+   return leg *worse* than assuming the centerline: 6.92 -> 8.55 px (0.81x).
+   That was the test the model was built to pass.
+2. **A free scan of theta_return peaks at 0 deg, not 180 deg** (log Z -7606 vs
+   -7774). The data prefers the robot on the SAME side of the tube in both
+   directions - the opposite of the proposed mechanism. A spatially-fixed offset
+   is what an object riding the outside of a bend would produce, but that is a
+   different model and it is not what was tested here.
+3. **Even the preferred variant degrades the leg it was fitted to**: outbound
+   residual 1.85 -> 3.46 px while log Z rises. Evidence and residual moving in
+   opposite directions means the marginal likelihood is gaining from how
+   probability mass is spread, not from a better fit.
+
+**A spurious result caught by reporting both legs.** The M1 held-out ratio does
+improve, 3.74x -> 2.47x, and in isolation that reads as the model closing the
+generalisation gap. It does not: the ratio improves because the *outbound*
+residual degrades (1.85 -> 3.46), while the return leg gets worse in absolute
+terms (6.92 -> 8.55). A ratio whose numerator was damaged is not evidence.
+Quoting it alone would have turned a refutation into a claimed success.
+
+**What survives.** T10's observation stands - the legs really are displaced by a
+median 11.6 px in the curved mid section - but a constant radial offset with a
+per-leg angle does not describe it. The likely reason is shape: the displacement
+is concentrated in roughly 30 mm of curved vessel, and a single `r` spread over
+190 mm of path is diluted to 0.5 mm. A curvature-dependent offset (large on
+bends, zero on straights) is the natural next model and is **untested** - it is
+not being claimed here on the strength of a scan that rejected its predecessor.
+
+Combined with K1-K5, two distinct off-centerline models have now been rejected
+on this data. "The robot is on the centerline" remains the working assumption
+not because it is established, but because nothing proposed so far beats it.
+
 ## Honest status
 
 The estimator was never the limiting factor, and after Stages P-R it is not
