@@ -49,7 +49,14 @@ python src/p0_headtohead.py          # P0  every camera under ONE composite metr
 python src/p0b_failure_classes.py    # P0b does affine fix P1's no-match class? (yes)
 python src/q1_affine_downstream.py   # Q1  re-derive I/I2/I3/M1/M2/O1 under the new camera
 python src/q2_camera_family.py       # Q2  all cameras + the 3D spread to quote
+python src/r1_size_cue_percamera.py  # R1  size cue redone per camera - retracts L1, rejects affine
+python src/r2a_outback_percamera.py  # R2a out-and-back agreement per camera - rejects f=1298
 ```
+
+Stages P, Q and R supersede parts of what precedes them. Where an earlier
+stage's number conflicts with a later one, the later stands; every retracted
+claim is flagged where it was made (Stage L's banner, Q's three retractions,
+Q2's superseded headline).
 
 ## The idea
 
@@ -585,6 +592,21 @@ So the error terms are:
 
 ## L — can appearance break the f/depth degeneracy?
 
+> **RETRACTED IN PART (Stage R1).** L1's headline — "the vessel-width cue
+> rejects `f`=516 at 9.8 sigma and favours the large-`f` family" — **is not
+> valid and is withdrawn.** L1 regressed log(width) on the depth profile of a
+> single camera (`c8_11`) and then compared candidates by rescaling that one
+> profile. But the candidates do not share a view direction: `c8_11`'s and the
+> affine model's view axes are **46 degrees apart** and their depth profiles
+> along the path are **anti-correlated (r = -0.86)**, so the sign of the fitted
+> slope depends on whose geometry you assume. L1 therefore asked "given
+> `c8_11`'s geometry, which `f` fits?" — a question whose answer is conditional
+> on the camera Stage Q2 later showed to be the outlier. Re-run per camera
+> (Stage R1), **both pinhole models are self-consistent and the cue cannot
+> separate them**; what it does reject is the affine model. The L2 result below
+> is unaffected — it involves no depth profile. Read L1's method, not its
+> verdict.
+
 C7-C13 established that position data alone cannot identify `f` (flat valley,
 40 stable px). Position is not the only signal in the video: a fixed-size
 object's apparent SIZE falls off as `1/Z`, so as the robot travels the path's
@@ -951,30 +973,182 @@ family, but `f`=516 tracks better than `f`=1298 on every metric and agrees with
 the affine model to 0.75 mm.** Size-cue evidence and tracking evidence point
 opposite ways. A calibration shot settles it; nothing in this data does.
 
+> **This conflict was not real (Stage R1).** L1's 9.8 sigma came from scoring
+> every candidate against `c8_11`'s depth profile; scored against their own,
+> both pinholes are self-consistent and the cue does not separate them at all.
+> There is nothing here for tracking evidence to contradict. What the corrected
+> cue *does* reject is the affine model — see Stage R.
+
 Per-frame spread across the whole family (max deviation from their mean):
 **median 3.25 mm, p90 5.57 mm, max 12.21 mm.** Excluding `f`=516 on L1's
 evidence gives 2.50 / 5.12 / 9.68 mm, but given the conflict above that
 exclusion is not safe, so the full-family figure is the honest one.
 
-> **The number to quote:** with the estimator's tracking failure rate now at
-> **3.9%**, absolute 3D position from this video is uncertain by about
-> **+-3.3 mm (median), +-5.6 mm (p90)** purely because the camera was never
-> calibrated. The estimator is no longer the limiting factor by any margin.
+> **SUPERSEDED BY STAGE R.** The "conflict" above was an artefact of L1's
+> method (see the retraction banner on Stage L), and the exclusion that turns
+> out to be justified is the opposite one: two independent non-circular tests
+> (R1, R2a) both point away from `f`=1298, and dropping it collapses the family
+> spread from 3.25 mm to **0.37 mm** median. The number to quote is in Stage R
+> below, not here.
+
+## R — two tests that do not grade a camera on its own exam
+
+Every column in Q2 — off-curve distance, reprojection, held-out reprojection —
+measures the distance from an observation to *that camera's own projected
+curve*. A camera is graded on the exam it wrote, so those columns are three
+views of one piece of evidence, not three independent ones (the same blind spot
+M2 identified for reprojection). Stage R adds two discriminators that are not
+of that form, and they resolve the family.
+
+**R1 — the size cue, redone per camera.** A fixed-diameter tube at depth `Z`
+subtends an image width proportional to `1/Z`, so every camera makes a
+*testable prediction* about how vessel width should modulate along the path:
+a pinhole predicts slope `-1/Z_med` against its own depth profile, and the
+affine model, having no depth term at all, predicts exactly zero. Each camera
+is scored against its own geometry — its own projected curve for the width
+sampling, its own depth profile for the regression (`src/r1_size_cue_percamera.py`):
+
+| camera | valid samples | measured slope | its own prediction | off by | verdict |
+|---|---|---|---|---|---|
+| pinhole `f`=1298 | 572 | -0.00485 +- 0.00081 | -0.00506 | 0.3 sigma | self-consistent |
+| pinhole `f`=516 | 594 | -0.01531 +- 0.00216 | -0.01123 | 1.9 sigma | self-consistent |
+| **affine, no depth** | 624 | **+0.00246 +- 0.00064** | **0** | **3.8 sigma** | **inconsistent** |
+
+Two findings. **The cue cannot separate the two pinholes** — both land on their
+own predictions, which is what kills L1's 9.8-sigma claim. **What it does
+reject is the affine model**, at 3.8 sigma: a real, non-zero width modulation
+is measured along the affine model's own projected curve, and the affine model
+predicts none. So **real perspective exists in this scene** and the affine
+camera, despite fitting and tracking best, is physically incomplete — exactly
+the caveat Stage P raised, now with a number. Note the measured slopes track
+the predictions *across* models (predictions differ 2.2x, measurements differ
+3.2x, same direction), which a pure taper artefact would not do; the taper
+confound is shared by all rows and so cancels in the ranking, though it still
+prevents reading any single row as an absolute measurement of perspective.
+
+**R2a — out-and-back arc-length agreement, per camera.** The robot visits most
+locations twice. Return frames are matched to outbound frames by proximity of
+the **raw detected 2D track** — an observation, with no camera in the loop —
+and each camera is then asked whether it assigns the same arc length to both
+visits (`src/r2a_outback_percamera.py`). A camera can place its curve beautifully
+close to the observations and still label one physical spot two different ways:
+
+| camera | p90 (match <3 px) | >2 mm | >5 mm | max |
+|---|---|---|---|---|
+| pinhole `f`=1298 | 1.20 mm | 6.3% | **4.9%** | 6.25 mm |
+| pinhole `f`=516 | 0.75 mm | 0.0% | **0.0%** | 1.50 mm |
+| affine, no depth | 0.50 mm | 1.4% | **0.0%** | 3.25 mm |
+
+All three medians sit at 0.25 mm — the arc-length grid step — so the bulk of
+pairs agree exactly and the discriminating signal is entirely in the tail.
+**`f`=1298 is the only camera that ever disagrees with itself by more than
+5 mm** (4.9% of tight-matched pairs, worst case 6.25 mm). That is a defect no
+amount of good curve-fitting excuses, and it is measured on an axis Q2 never
+touched.
+
+*Limits, stated plainly.* R2a can rule a camera out but cannot confirm one: a
+projection warped *consistently* returns the same wrong label both times and
+passes. (Warping does leak in weakly through the motion prior, since the two
+passes cross the same geometry in opposite directions at different speeds.) The
+`f`=1298 tail rests on 7 pairs out of 143 — suggestive, not decisive on its
+own; its weight comes from corroborating the five Q2 columns that already
+ranked `f`=1298 last. And R2a's attempted stratification by self-intersection
+was **invalid and is not reported above**: the proxy used ("how many outbound
+frames lie within 8 px") mostly measures where the robot moved slowly, since
+consecutive frames are only ~4.5 px apart, so it does not identify
+self-intersections at all. That sub-test needs a real geometric multiplicity
+measure, not this one.
+
+**What the two tests do together.** They are orthogonal, and each eliminates a
+different model:
+
+| | R1 (physical, size cue) | R2a (self-consistency) | Q2's five columns (circular) |
+|---|---|---|---|
+| pinhole `f`=1298 | best (0.3 sigma) | **fails** — only model >5 mm | **worst on every column** |
+| pinhole `f`=516 | passes (1.9 sigma) | cleanest tail | best held-out |
+| affine | **fails (3.8 sigma)** | clean | best own-curve residual |
+
+`f`=516 is the only model that fails nothing. The honest reading of `f`=1298 is
+"opposed by six measurements, mildly favoured by one weak one" — R1 does prefer
+it, but R1's separation between the two pinholes (0.3 vs 1.9 sigma, both
+passing, under a shared taper confound) is far weaker than R2a's tail
+separation, and every other axis is against it.
+
+**The number to quote (replaces Q2's).** Dropping `f`=1298 from the family:
+
+| family | median | p90 | max |
+|---|---|---|---|
+| all three models (Q2's figure) | 3.25 mm | 5.57 mm | 12.21 mm |
+| **excluding `f`=1298 (R1 + R2a)** | **0.37 mm** | **2.37 mm** | **4.48 mm** |
+
+> **Revised headline: absolute 3D position from this video is uncertain by
+> about +-0.4 mm (median) / +-2.4 mm (p90) from the unresolved camera choice —
+> not +-3.3 mm.** Nearly the whole of Q2's systematic was one model that two
+> independent tests now reject. This does not make the calibration shot
+> unnecessary — it is what would let the remaining pair be checked rather than
+> argued — but it moves the camera ambiguity from "the dominant error term in
+> the project" to roughly the level of the estimator's own noise floor.
+
+## S — the per-frame uncertainty, with the camera term included
+
+Every sigma reported before this point (Stage I's posterior std, I2's smoothed
+posterior) is conditional on the camera being correct: it covers detection
+noise and arc-length ambiguity only. Stage R left two models that no test
+rejects, so the systematic between them is measurable and belongs in the error
+bar (`src/s1_uncertainty.py`, running the full forward-backward smoother under
+each surviving camera):
+
+| component | median | p90 | max |
+|---|---|---|---|
+| `sigma_stat` within-model, random | 0.78 mm | 0.95 mm | 3.27 mm |
+| `delta_cam` between-model, systematic | 0.75 mm (+-0.37) | 4.75 mm (+-2.37) | 8.95 mm |
+| **combined** | **0.98 mm** | **2.71 mm** | **4.60 mm** |
+
+They are reported separately rather than summed because they behave
+differently: `sigma_stat` shrinks with better detection or more frames,
+`delta_cam` shrinks only with a calibration shot.
+
+**The camera systematic exceeds the statistical term on only 30% of frames.**
+At the median this is noise-dominated — detection noise (0.78 mm) is roughly
+twice the camera systematic (0.37 mm) — and the systematic takes over only in
+the tail (+-2.37 vs +-0.95 mm at p90). That sharpens rather than weakens the
+calibration argument: **a checkerboard buys worst-case guarantees, not typical
+accuracy.** For a device that must not be reported in the wrong vessel, the
+tail is the number that matters, but it should be quoted as such.
+
+> **Deliverable statement.** Reported 3D position is accurate to about
+> **+-0.98 mm (median), +-2.71 mm (p90), 4.60 mm worst case**, of which
+> +-0.37 mm (median) is an irreducible camera-calibration systematic and
+> +-0.78 mm is estimator noise that better detection would shrink.
+
+`src/s2_summary_figs.py` and `src/s3_animation.py` build the presentation
+assets from these artefacts. Both write into `out/figs/`, which is not
+committed - the animation renders frames of the source video.
 
 ## Honest status
 
-The estimator is sound (0.47 mm on synthetic data with realistic noise, 53x
-real-time). The real-video numbers are capped by registration, which is capped
-by missing data — one centerline, one view, unknown intrinsics. This is a data
-problem, not an algorithmic one, and C10/C11 turned that from a qualitative
-statement into a number: two camera models that fit the 2D track about equally
-well (5.6 vs 4.6 px median reprojection) recover 3D trajectories that disagree
-by a **median of 4.2 mm** — bigger than every other error term in this project
-combined (0.47 mm synthetic estimator error, the debunked 1.2 mm off-axis
-term, even the 0.85 mm real-video reprojection-implied error). Reprojection
-error looking small is not evidence the 3D output is right; with `f`
-unidentified, it can't be. This is the actual headline number for why the
-checkerboard shot below is not optional.
+The estimator was never the limiting factor, and after Stages P-R it is not
+the largest uncertainty either. Current working configuration is **affine
+camera + Viterbi + `v_max`=60**: reprojection median 3.5 px, failure rate
+3.9%, held-out (return-leg) failure rate 9.3%, and 0.0% speed violations by
+construction.
+
+**On the camera ambiguity, which was the headline problem for most of this
+project.** Three mutually incompatible cameras fit the same 2D track, and no
+2D residual can choose between them (C7-C13, L2). Stage R broke that with two
+discriminators that do not grade a camera on its own projection: the
+per-camera size cue (R1) rejects the affine model at 3.8 sigma, showing real
+perspective exists in the scene; out-and-back arc-length agreement (R2a)
+rejects `f`=1298, the only model that ever labels one physical location two
+ways by more than 5 mm. With `f`=1298 dropped, the family's 3D spread falls
+from **3.25 mm to 0.37 mm median (p90 5.57 -> 2.37 mm)**. The residual
+camera ambiguity is now comparable to the estimator's own noise floor rather
+than 9x larger than it.
+
+That reframes the checkerboard from "the thing setting how wrong the answer
+could be" to "the thing that would let the last two candidates be checked
+instead of argued." Still the top ask, but for a smaller stake, and the
+project's central claim no longer depends on getting it.
 
 Stage J changes the ordering of what to ask for. A second *simultaneous* view
 removes catastrophic tracking failures outright and needs only ~30 degrees of
@@ -982,47 +1156,41 @@ separation; a rotating single detector does not help at all. But biplane only
 improves calibration by ~3x, so it does not substitute for knowing the
 intrinsics.
 
-**One real, zero-data win is already banked:** I2's offline forward-backward
-smoothing cuts the median error on the causal filter's worst quarter of frames
-by 2.4x (17.5 to 7.3 px) using only the video already in hand, and its
-posterior probability is a legitimate confidence signal, not a smoothness
-heuristic. It only applies offline — real-time tracking still needs the causal
-filter and inherits its 16.2%/6.0% failure numbers — but any retrospective use
-of this recording should decode with Viterbi, not the causal filter. **A
-second, smaller zero-data win from M2/M3: report the Viterbi path, not the
-causal posterior mean, whenever physical plausibility matters** — the mean can
-imply speeds up to 1442 mm/s at bimodal moments (worse than a memoryless
-nearest-point lookup), while Viterbi is exactly speed-bounded by construction;
-and raising `v_max` from 30 to 60 mm/s is a free -21% on median error and -6.5
-points on the failure rate, worth carrying into any re-tuning.
+**The zero-data wins that survived.** Two of the three banked earlier did not
+(see Stage Q): I2's 2.4x offline-smoothing gain and I3's abstention rule were
+both artefacts of the mis-specified pinhole camera and are withdrawn. What
+holds up: **report the Viterbi path, not the causal posterior mean** — the
+mean can imply speeds up to 1442 mm/s at bimodal moments, worse than a
+memoryless nearest-point lookup, while Viterbi is exactly speed-bounded by
+construction (M2, confirmed under every camera in P0); **raise `v_max` from
+30 to 60 mm/s**, which cuts the held-out failure rate 25.7% -> 19.5% and the
+speed-violation rate 6.2% -> 2.1% (M3, P0); and **switch the camera from
+pinhole to affine for the tracking front end**, which more than halves the
+held-out failure rate, 19.8% -> 9.3% (P0). None of these needed new data.
 
 To unblock, in order of value:
 
-1. **A checkerboard shot through the same optics.** Fixes intrinsics outright
-   and removes the degeneracy. Cheapest by far, and now the clear priority: K2-K4
-   show real-data error is dominated by registration/calibration (p90 86 px ~
-   13 mm), not by the off-axis term this item used to be ranked below. C10
-   confirmed a better solver alone cannot substitute for this, and C11
-   quantified the cost of not doing it: two equally-plausible camera models
-   put the 3D trajectory 4.2 mm apart at the median. L2 sharpens this further —
-   an 8-param camera with NO depth term fits the 2D track *better* than any
-   pinhole model tried, so the 2D data cannot even tell you perspective is the
-   right model family, let alone which `f`. O1 adds the failure-mode argument:
-   68% of Viterbi's remaining errors have no good match anywhere on the curve
-   in ANY branch, which is what calibration/registration error looks like, not
-   branch ambiguity — a second view (item 3) cannot fix most of what is left.
-   L1's vessel-width cue is the one piece of real, if imperfect, evidence
-   available without new hardware: it rejects `f`=516 at 9.8 sigma and favours
-   the large-`f` family already in use, so until a real shot exists, `c8_11`
-   is the better-supported default of the two, not an arbitrary pick.
+1. **A checkerboard shot through the same optics.** Still first, but the case
+   changed in Stage R. It is no longer needed to bound a 3-4 mm systematic —
+   R1 and R2a already reduced that to 0.37 mm median by eliminating `f`=1298.
+   It is needed because the two surviving models are physically incompatible
+   in *kind*: R1 shows real perspective exists (rejecting the affine model at
+   3.8 sigma), yet the affine model is what tracks best, so the pipeline is
+   currently using a projection it has evidence against, and only an external
+   intrinsic can say what the physically-correct model that also tracks well
+   actually looks like. C10 confirmed a better solver cannot substitute.
 2. **The full 3D vessel geometry (STL or all-branch centerlines).** Lets the
    whole vessel tree constrain the camera instead of a single curve, which is
    what published 2D/3D roadmapping methods actually do.
 3. **A second simultaneous view**, if the hardware allows it. ~30 degrees of
-   separation is enough; orthogonal biplane adds little beyond that. O1's
-   finding narrows the expected payoff: it directly addresses only the ~32%
-   of Viterbi's failures that are genuine branch-selection errors, not the
-   68% that are registration error regardless of view count.
+   separation is enough; orthogonal biplane adds little beyond that. Stage Q
+   *raised* this item's expected payoff back up: O1's original finding (that
+   failures avoid geometrically ambiguous zones, which had demoted it) reverses
+   under the corrected camera — remaining failures now concentrate in
+   self-intersection zones by 3.1x. Caveat: that reversal rests on 40 failures
+   split 12/28, and the attempted re-check of it in R2a used an invalid
+   self-intersection proxy, so the evidence here is thinner than the other
+   items and worth re-establishing on a proper multiplicity measure.
 4. **A direct view of the robot body (deprioritised).** Vessel-diameter data
    was previously listed here to turn the D3 wobble into a modelled radial
    offset. K2-K4 found no evidence for that offset on real data — the wobble
