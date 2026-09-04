@@ -30,7 +30,24 @@ u = np.load(DATA / "s1_uncertainty.npz")
 X_ref, delta, tot = u["X_ref"], u["delta"], u["tot"]
 fin = np.load(DATA / "i_final.npz"); UV = fin["UV"]
 q = np.load(DATA / "q1_affine_downstream.npz"); PG = q["PG"]
-bg = cv2.cvtColor(imread_u(OUT / "background_median.png"), cv2.COLOR_BGR2RGB)
+bg_bgr = imread_u(OUT / "background_median.png")
+bg = cv2.cvtColor(bg_bgr, cv2.COLOR_BGR2RGB)
+
+# Stage T. Two honest-rendering problems, fixed together:
+#   (a) tinting only the ORANGE lumen made the projected centerline look like it
+#       ran through empty space where it was following an unfilled vessel;
+#   (b) tinting every non-background pixel overcorrects - that mask is 62% of the
+#       frame and includes the clear acrylic supports, implying all of it is
+#       vasculature.
+# So: tint the filled lumen (specific and correct), and draw the projected
+# centerline dashed wherever it leaves it, with the reason stated in the legend.
+_hsv = cv2.cvtColor(bg_bgr, cv2.COLOR_BGR2HSV)
+_h, _s, _v = _hsv[..., 0], _hsv[..., 1], _hsv[..., 2]
+_lumen = (((_h < 25) | (_h > 170)) & (_s > 40) & (_v > 40)).astype(np.uint8)
+_lumen = cv2.morphologyEx(_lumen, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8)).astype(bool)
+bg = bg.copy()
+bg[_lumen] = (0.82 * bg[_lumen] + 0.18 * np.array([70, 130, 255])).astype(np.uint8)
+
 K = len(X_ref)
 frames = list(range(0, K, STEP))
 print(f"[S3] {len(frames)} animation frames (stride {STEP}) from {K}")
@@ -39,11 +56,30 @@ fig = plt.figure(figsize=(15, 6.4))
 axL = fig.add_subplot(1, 2, 1)
 axR = fig.add_subplot(1, 2, 2, projection="3d")
 
-axL.imshow(bg); axL.plot(PG[:, 0], PG[:, 1], color="0.35", lw=1.2)
+axL.imshow(bg)
+_xi = np.clip(np.rint(PG[:, 0]).astype(int), 0, W - 1)
+_yi = np.clip(np.rint(PG[:, 1]).astype(int), 0, H - 1)
+_on = _lumen[_yi, _xi]
+_seg, _cur = [], [0]
+for _i in range(1, len(PG)):
+    if _on[_i] != _on[_i - 1]:
+        _seg.append((_cur, _on[_i - 1])); _cur = [_i]
+    else:
+        _cur.append(_i)
+_seg.append((_cur, _on[-1]))
+for _ix, _isOn in _seg:
+    if len(_ix) < 2: continue
+    axL.plot(PG[_ix, 0], PG[_ix, 1], color="0.35", lw=1.3,
+             ls="-" if _isOn else (0, (3, 2)))
+from matplotlib.lines import Line2D
+axL.legend(handles=[Line2D([], [], color="0.35", lw=1.3, label="Path 2 projected"),
+                    Line2D([], [], color="0.35", lw=1.3, ls=(0, (3, 2)),
+                           label="...crossing an unfilled vessel segment")],
+           loc="lower left", fontsize=7, framealpha=.85)
 trailL, = axL.plot([], [], "-", color="#4a7fb5", lw=2, alpha=.8)
 dotL, = axL.plot([], [], "o", color="#b3452e", ms=11, mec="w", mew=1.5)
 axL.set_xlim(0, W); axL.set_ylim(H, 0); axL.set_xticks([]); axL.set_yticks([])
-axL.set_title("What it sees: one 2D view", fontsize=12)
+axL.set_title("What it sees: one 2D view  (blue tint = fluid-filled lumen)", fontsize=11)
 
 axR.plot(C3[:, 0], C3[:, 1], C3[:, 2], color="0.8", lw=1.5)
 trailR, = axR.plot([], [], [], "-", color="#4a7fb5", lw=2)

@@ -49,6 +49,24 @@ unresolved.
 | speed violations | 0.0% |
 | throughput | 0.62 ms/frame causal (53x real-time at 30 fps) |
 
+
+## Correction from Stage T (read this before the axis scores below)
+
+A reviewer watching the video said the robot was not running inside the tubes.
+Checked against the pixels: the **detection** is fine - 99.7% of detections sit
+inside a tight, undilated lumen mask, a median 19 px deep where the tube
+half-width is ~22 px. But the **projected centerline** the animation draws
+leaves the orange lumen 10% of the time, so the reported 3D position in those
+stretches is outside the vasculature by the video's own evidence.
+
+Most of that gap is a masking artefact - the phantom has fluid-free tube
+segments that an orange-keyed mask cannot see, and against a mask of any tube
+structure the model is on-vessel 98% of the time with a worst deviation of
+~1 mm. But the gap was real and **no metric in this project could have caught
+it**: every measure compares the estimate to the observation, never the
+projected model to the anatomy. That check now exists (`src/t5`, `src/t7`) and
+is a fourth camera discriminator, ranking the family the same way R1/R2a did.
+
 ## Evaluation — 7 axes
 
 Scored against the evidence in [`report.md`](report.md). Stages P-R replaced

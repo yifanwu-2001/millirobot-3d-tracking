@@ -1125,6 +1125,77 @@ tail is the number that matters, but it should be quoted as such.
 assets from these artefacts. Both write into `out/figs/`, which is not
 committed - the animation renders frames of the source video.
 
+## T — "the robot isn't running inside the tube" (raised on the video, and correct)
+
+The challenge: watching the video, the robot does not appear to be running
+inside the pipes. This would invalidate the premise, not a parameter, so it was
+tested against the pixels rather than argued from the fitted geometry.
+
+**The detection is not the problem.** Stage D's vessel mask is dilated 15 px and
+closed 9 px - a deliberately generous detection ROI - so the "99.3% inside the
+vessel mask" quoted in P1 was close to meaningless: it would pass an object
+sliding over the phantom's outer surface. Rebuilt as a TIGHT, undilated lumen
+mask (`src/t2_inside_lumen.py`):
+
+| | |
+|---|---|
+| detections inside the tight lumen | **99.7%** (uniformly random point: 30.8%) |
+| depth into the lumen | median 19.0 px, p10 12.2 px |
+| tube half-width for comparison | ~22 px |
+
+The tracked object sits near the tube centre in projection, essentially always.
+The only three frames outside are the detection outliers `d2_clean` already
+rejected (two of them at (950, 6), the frame corner). Native-resolution crops
+and a consecutive-frame strip (`src/t1_visual_check.py`, `src/t3_wide_look.py`)
+show a small dark object translating along the tube axis and tumbling as it
+goes. It is a robot, and it is in the lumen.
+
+**The model is the problem, and it is what the video shows.** What the animation
+draws over the video is the *projected centerline*, and that leaves the orange
+tubes and crosses open space in places (`src/t4_overlay_check.py`):
+
+| | on an orange lumen |
+|---|---|
+| detected robot track | 99.7% |
+| projected centerline (what the animation draws) | **89.9%** |
+
+So the reported 3D positions in those stretches lie, by the video's own
+evidence, outside the vasculature. **Every metric in this project missed this,
+for one structural reason: they all compare the ESTIMATE to the OBSERVATION -
+reprojection, off-curve distance, out-and-back agreement, held-out residual.
+None asks whether the projected model lies on the anatomy at all.** A camera can
+sit close to every detected robot position and still route long stretches of
+curve through empty space, because the robot only ever visits part of the curve.
+This is the same blind spot M2 identified, in a place nothing had looked.
+
+**Most of the gap is a mask artefact, and that matters for how much to worry.**
+The longest off-vessel stretch (s = 102.5-116.2 mm, 13.8 mm) runs along a pale,
+**fluid-free tube segment** (`src/t6_offvessel_look.py`) - a real vessel that
+an orange-keyed mask cannot see. Stage D built that mask on orange in the first
+place and never questioned whether every vessel is filled. Re-scored against a
+mask of any tube-like structure (`src/t7_allvessel_mask.py`):
+
+| camera | on any tube | (orange-only) | worst deviation |
+|---|---|---|---|
+| pinhole `f`=1298 | 96.1% | 81.6% | 6.4 px |
+| pinhole `f`=516 | **98.8%** | 89.8% | 5.2 px |
+| affine | 98.0% | 89.9% | 5.2 px |
+
+Nothing is off by more than 10 px, and the worst deviation is ~1 mm. So the
+model does follow the vasculature; the orange overlay made it look otherwise.
+
+**What this leaves.** Two things stand:
+
+1. **A new metric, and a fourth camera discriminator.** Anatomical plausibility
+   is independent of every prior measure and of any camera's own fit, and it
+   ranks the family the same way R1/R2a did (`f`=1298 worst). Both masks should
+   be reported: orange-only is specific but blind to unfilled tubes, any-tube is
+   complete but permissive (62% of the frame), and the truth for a given stretch
+   is between them.
+2. **The deliverable was misleading and is being regenerated.** Drawing the
+   projected centerline over an orange-only rendering, with no indication that
+   pale tubes are vessels too, reads as a robot running outside the pipes.
+
 ## Honest status
 
 The estimator was never the limiting factor, and after Stages P-R it is not
