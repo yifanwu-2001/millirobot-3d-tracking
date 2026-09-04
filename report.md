@@ -1196,6 +1196,69 @@ model does follow the vasculature; the orange overlay made it look otherwise.
    projected centerline over an orange-only rendering, with no indication that
    pale tubes are vessels too, reads as a robot running outside the pipes.
 
+## T9-T10 — "your red dots and the yellow curve do not coincide"
+
+Correct, in one region, and chasing it produced two wrong intermediate claims
+worth recording alongside the right answer.
+
+**Wrong claim 1: "the robot travels 3.25x further than the model, so they are
+different routes."** That compared the RAW detection track against a smooth
+curve. The raw track carries the 1.17 Hz roll wobble, which inflates measured
+2D arc length ~2.3x - the exact error Stage D3 exists to prevent, repeated.
+De-wobbled and restricted to the outbound leg the ratio is **0.93x** in that
+region against 1.11x globally: the robot travels no further than the model says.
+
+**Wrong claim 2: "the return leg goes around a different vessel."** The legs do
+separate visibly, but the maximum separation is **42.0 px** and a tube is ~44 px
+wide. **0%** of return frames are more than a tube-width from the outbound path.
+Same tube throughout.
+
+**What is actually happening.** Separating the legs and removing the wobble
+(`src/t10_clean_overlay.py`):
+
+| in the mid region (x 250-570, y 470-660) | distance to projected Path 2 |
+|---|---|
+| outbound leg, de-wobbled | median **6.0 px** |
+| return leg, de-wobbled | median **18.9 px** |
+
+and leg-to-leg directly:
+
+| | median | p90 | max |
+|---|---|---|---|
+| return frame -> nearest outbound frame, whole track | 4.3 px | 22.9 px | 42.0 px |
+| same, mid region only | 11.6 px | - | 42.0 px |
+
+**The robot rides opposite walls of the same lumen on the two passes**, up to a
+full diameter apart at the extreme, and Path 2's centerline sits nearer the
+outbound pass. In a curved section that is what a rolling millirobot should do.
+What made it look like a gross misalignment in the T9 figure was plotting the
+raw, wobbling track for both legs pooled together.
+
+**Three earlier conclusions need amending.**
+
+1. **D2's "the two legs retrace the same 2D curve to a median of 2.0 px"** was
+   measured on the pooled raw track and used throughout as a ground-truth-free
+   validator. The median is right; the tail is not. In the curved mid region the
+   legs are a median 11.6 px apart, so out-and-back agreement is not a clean
+   self-consistency check there - it is partly measuring wall-hugging.
+2. **M1's held-out gap** (return leg 2.4-2.9x worse) was attributed to
+   overfitting a camera fitted on the outbound leg. Some of it is simpler than
+   that: the return leg is *physically displaced within the lumen* relative to
+   the outbound leg the camera was fitted to. Not an estimator defect.
+3. **K2-K4 falsified the wrong off-centerline model.** They tested a radial
+   offset *rotating at 1.17 Hz*, and correctly rejected it. The displacement
+   that is actually present is quasi-static and differs between passes - a
+   wall-hugging offset that changes with travel direction. K never tested that,
+   so "the robot is on the centerline" remains unsupported rather than
+   established. This is a live, testable model: `r` constant per leg, sign
+   flipping with direction of travel.
+
+**And the honest answer to the original question.** Over the whole track the
+detections and the projected centerline do coincide - median 4.4 px raw, 2.7 px
+de-wobbled, against a ~44 px tube width. They separate in the curved mid
+section, on the return leg, by a median of 18.9 px. Both halves of that sentence
+matter, and the aggregate median alone was hiding the second one.
+
 ## Honest status
 
 The estimator was never the limiting factor, and after Stages P-R it is not
