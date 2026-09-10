@@ -7,8 +7,10 @@ the pairwise 3D disagreement across the family is the honest systematic error ba
 on absolute position - the single number to put in front of anyone deciding
 whether a calibration shot is worth taking.
 
-L1's vessel-width cue rejects f=516 at 9.8 sigma, so the family is not
-equiprobable; the spread excluding f=516 is reported separately.
+The family is not equiprobable: R3's bug-immune held-out evidence rejects
+f=1298 by 266 nats and it is last on every column here, so the spread
+excluding f=1298 is the one to quote. (An earlier version excluded f=516 on
+L1's 9.8-sigma claim, which was retracted in Stage R1.)
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -78,16 +80,26 @@ print(f"\n[Q2] per-frame spread across ALL {len(ks)} models (max deviation from 
 print(f"     median {np.median(spread):.2f} mm   p90 {np.percentile(spread,90):.2f} mm"
       f"   max {spread.max():.2f} mm")
 
-keep = [k for k in ks if "516" not in k]
+# NOTE: an earlier version of this block excluded f=516 on L1's "9.8 sigma"
+# claim. L1's verdict was an artefact of scoring every camera against c8_11's
+# depth profile (retracted, Stage R1). The exclusion supported by the
+# bug-immune evidence (R3, f=1298 worse by 266 nats held out) and by every Q2
+# column is f=1298. The old key `spread_nof516` is still written for any
+# downstream reader, but labelled as the superseded exclusion.
+keep = [k for k in ks if "1298" not in k]
 Xs2 = np.stack([res[k]["X"] for k in keep]); c2 = Xs2.mean(0)
 sp2 = np.linalg.norm(Xs2 - c2, axis=2).max(0)
-print(f"\n[Q2] excluding f=516, which L1's vessel-width cue rejects at 9.8 sigma:")
+old = [k for k in ks if "516" not in k]
+Xo = np.stack([res[k]["X"] for k in old]); spo = np.linalg.norm(Xo - Xo.mean(0), axis=2).max(0)
+print(f"\n[Q2] excluding f=1298 (rejected by R3's held-out evidence, 266 nats, and last on every column above):")
 print(f"     median {np.median(sp2):.2f} mm   p90 {np.percentile(sp2,90):.2f} mm"
       f"   max {sp2.max():.2f} mm")
+print(f"     (superseded exclusion of f=516 on L1's retracted claim, for the record: "
+      f"median {np.median(spo):.2f} / p90 {np.percentile(spo,90):.2f} / max {spo.max():.2f} mm)")
 print(f"\n[Q2] THE NUMBER TO QUOTE: absolute 3D position from this video is uncertain")
 print(f"     by about +-{np.median(sp2):.1f} mm (median) / {np.percentile(sp2,90):.1f} mm (p90)")
 print(f"     purely because the camera was never calibrated. Tracking failure rate is")
 print(f"     now {min(100*np.mean(res[k]['rp']>30) for k in keep):.1f}% - the estimator is not the limit.")
-np.savez(DATA / "q2_camera_family.npz", spread=spread, spread_nof516=sp2,
+np.savez(DATA / "q2_camera_family.npz", spread=spread, spread_excl_1298=sp2, spread_nof516=spo,
          **{f"X|{k}": res[k]["X"] for k in res})
 print(f"\n[Q2] saved data/q2_camera_family.npz")

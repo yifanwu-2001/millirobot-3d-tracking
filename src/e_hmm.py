@@ -111,7 +111,12 @@ class ArcHMM:
             path[k] = si
             if k == 0: break
             vprev = back[k, si, vi]
-            si = int(np.clip(si - shift[vi], 0, self.S - 1)); vi = int(vprev)
+            # ``adv[:, j]`` was displaced with velocity j BEFORE the velocity
+            # transition, so the inverse displacement must use the selected
+            # previous velocity.  Using ``shift[vi]`` (the new velocity) can
+            # stitch together states that were never connected in the forward
+            # graph and invalidates the advertised hard speed bound.
+            si = int(np.clip(si - shift[vprev], 0, self.S - 1)); vi = int(vprev)
         return self.s[path]
 
 

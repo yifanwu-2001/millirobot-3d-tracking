@@ -50,13 +50,22 @@ python src/p0b_failure_classes.py    # P0b does affine fix P1's no-match class? 
 python src/q1_affine_downstream.py   # Q1  re-derive I/I2/I3/M1/M2/O1 under the new camera
 python src/q2_camera_family.py       # Q2  all cameras + the 3D spread to quote
 python src/r1_size_cue_percamera.py  # R1  size cue redone per camera - retracts L1, rejects affine
-python src/r2a_outback_percamera.py  # R2a out-and-back agreement per camera - rejects f=1298
+python src/r2a_outback_percamera.py  # R2a out-and-back agreement per camera (verdict retracted after the Viterbi fix)
+python src/r3_evidence_family.py     # R3  bug-immune held-out evidence, whole family - rejects f=1298 by 266 nats
+python src/r4_gravity_offset.py      # R4  world-fixed direction (gravity/gradient) offset - rejected; gravity is along the ray
+python src/r5_burst_diagnosis.py     # R5  V4's f=516-over-affine preference is twelve frames in two bursts
+python src/r6_side_checks.py         # R6  V11 lag, V12 jitter, f=516 intrinsics
+python src/v8b_tube_v13widths.py     # V8b V8's gain with measured widths and no imputed junction radius
 ```
 
-Stages P, Q and R supersede parts of what precedes them. Where an earlier
-stage's number conflicts with a later one, the later stands; every retracted
-claim is flagged where it was made (Stage L's banner, Q's three retractions,
-Q2's superseded headline).
+The V-stage scripts (`src/v1_*` .. `src/v13_*`) and their write-up live in
+`IMPROVEMENTS.md`, `V12_ALIGNMENT.md` and `V13_3D_LIMITS.md`; Stages R3-R6 and
+V8b here are the review of that work. Stages P-R and V supersede parts of what
+precedes them. Where an earlier stage's number conflicts with a later one, the
+later stands; every retracted claim is flagged where it was made (Stage L's
+banner, Q's three retractions, Q2's superseded headline, R2a's banner). After
+the `ArcHMM.viterbi` backtracking fix (V11), P0, Q2, V3, V5 and V6 were re-run
+and are unchanged; R2a was the only conclusion the bug had carried.
 
 ## The idea
 
@@ -986,9 +995,11 @@ exclusion is not safe, so the full-family figure is the honest one.
 
 > **SUPERSEDED BY STAGE R.** The "conflict" above was an artefact of L1's
 > method (see the retraction banner on Stage L), and the exclusion that turns
-> out to be justified is the opposite one: two independent non-circular tests
-> (R1, R2a) both point away from `f`=1298, and dropping it collapses the family
-> spread from 3.25 mm to **0.37 mm** median. The number to quote is in Stage R
+> out to be justified is the opposite one: the bug-immune held-out evidence
+> (R3, `f`=1298 worse by 266 nats) and every column above point away from
+> `f`=1298, and dropping it collapses the family spread from 3.25 mm to
+> **0.37 mm** median. (R2a originally carried this; its verdict was later
+> retracted as a Viterbi-bug artefact.) The number to quote is in Stage R
 > below, not here.
 
 ## R — two tests that do not grade a camera on its own exam
@@ -1046,6 +1057,16 @@ pairs agree exactly and the discriminating signal is entirely in the tail.
 amount of good curve-fitting excuses, and it is measured on an axis Q2 never
 touched.
 
+> **RETRACTED after the Viterbi fix.** The tail above was produced by the
+> `ArcHMM.viterbi` backtracking bug V11 later found (backtracking with the new
+> velocity's shift instead of the previous velocity's). Re-run with the fix,
+> every camera is clean: `f`=1298 goes to **0.0% >5 mm, max 3.25 mm** (p90
+> 0.50 mm at the <3 px match), indistinguishable from `f`=516 (max 1.00 mm)
+> and affine (max 1.75 mm). R2a no longer separates the family. The method is
+> sound and stays; its verdict does not, and R3 below replaces it. Everything
+> that cited R2a as the reason `f`=1298 is excluded — Q2's superseded note,
+> S1, V4, the README and SUMMARY of the time — inherits this correction.
+
 *Limits, stated plainly.* R2a can rule a camera out but cannot confirm one: a
 projection warped *consistently* returns the same wrong label both times and
 passes. (Warping does leak in weakly through the motion prior, since the two
@@ -1059,35 +1080,102 @@ consecutive frames are only ~4.5 px apart, so it does not identify
 self-intersections at all. That sub-test needs a real geometric multiplicity
 measure, not this one.
 
-**What the two tests do together.** They are orthogonal, and each eliminates a
-different model:
+**What survives after the fix.** R1 rejects the affine model and cannot
+separate the two pinholes; R2a separates nothing. The exclusion of `f`=1298
+needed a replacement leg to stand on. R3 supplies it.
 
-| | R1 (physical, size cue) | R2a (self-consistency) | Q2's five columns (circular) |
+**R3 — sequential predictive evidence, whole family, bug-immune.** V4
+introduced the strongest discriminator that does not depend on a decoded
+path: the forward-only sequential predictive log-evidence
+`sum_k log p(u_k | u_1..k-1)` under each camera, same sigma and motion prior,
+split by leg. V4 scored only `f`=516 vs affine and took `f`=1298's rejection
+from R2a. `src/r3_evidence_family.py` scores all three:
+
+| camera | logZ outbound (fit set) | logZ RETURN (held out) | vs best, return |
 |---|---|---|---|
-| pinhole `f`=1298 | best (0.3 sigma) | **fails** — only model >5 mm | **worst on every column** |
-| pinhole `f`=516 | passes (1.9 sigma) | cleanest tail | best held-out |
-| affine | **fails (3.8 sigma)** | clean | best own-curve residual |
+| pinhole `f`=516 | -4756.9 | **-2849.3** | best |
+| affine | -4807.9 | -2905.9 | -56.6 nats |
+| pinhole `f`=1298 | -4974.9 | -3115.9 | **-266.5 nats** |
 
-`f`=516 is the only model that fails nothing. The honest reading of `f`=1298 is
-"opposed by six measurements, mildly favoured by one weak one" — R1 does prefer
-it, but R1's separation between the two pinholes (0.3 vs 1.9 sigma, both
-passing, under a shared taper confound) is far weaker than R2a's tail
-separation, and every other axis is against it.
+The `f`=1298 gap is diffuse — median per-frame difference -0.012 nats, the ten
+largest frames carry 36%, and **256 of the 266 nats persist with the junction
+episode (frames 880-925) removed**. That is a whole-sequence verdict, not an
+episode. What the evidence is: it integrates the likelihood over the entire
+`(s, sdot)` posterior, so it rewards a camera whose arc-length
+parameterisation lets the motion prior explain the observed sequence — the
+speed-consistency signal R2 was designed to look for — and it is bug-immune
+because no path is decoded. What it is not: free of the camera's own
+projection; the likelihood is still Gaussian in the distance to that camera's
+curve. "Less circular" is the honest description. That Q2's off-curve column
+(affine 2.7 px, better than `f`=516's 3.5) and this table (`f`=516 better than
+affine) disagree shows the evidence carries information beyond nearest-curve
+distance.
 
-**The number to quote (replaces Q2's).** Dropping `f`=1298 from the family:
+Post-fix re-runs of Q2 (`f`=1298 last on every column, unchanged), P0, V3 (39
+failures, 0 strict branch-selection errors, 4.4x co-location at p = 0.016 —
+unchanged) and V5 (`f`=516 Viterbi: 3.58 px / 3.8% / held-out 6.07 px, 7.9% —
+unchanged) confirm that the bug touched only the out-and-back tails. R2a was
+the one conclusion built on those tails.
+
+**The number to quote (post-fix; replaces Q2's).** Dropping `f`=1298 on R3 +
+Q2's five columns:
 
 | family | median | p90 | max |
 |---|---|---|---|
-| all three models (Q2's figure) | 3.25 mm | 5.57 mm | 12.21 mm |
-| **excluding `f`=1298 (R1 + R2a)** | **0.37 mm** | **2.37 mm** | **4.48 mm** |
+| all three models | 3.25 mm | 5.49 mm | 11.41 mm |
+| **excluding `f`=1298 (R3 + Q2)** | **0.37 mm** | **2.31 mm** | **4.15 mm** |
 
-> **Revised headline: absolute 3D position from this video is uncertain by
-> about +-0.4 mm (median) / +-2.4 mm (p90) from the unresolved camera choice —
-> not +-3.3 mm.** Nearly the whole of Q2's systematic was one model that two
-> independent tests now reject. This does not make the calibration shot
-> unnecessary — it is what would let the remaining pair be checked rather than
-> argued — but it moves the camera ambiguity from "the dominant error term in
-> the project" to roughly the level of the estimator's own noise floor.
+> **Headline unchanged, reason changed: absolute 3D position is uncertain by
+> about +-0.4 mm (median) / +-2.3 mm (p90) from the unresolved camera choice.**
+> It rests on R3's 266-nat held-out evidence gap and Q2's five columns — not
+> on R2a. The calibration shot is still what would let the remaining pair be
+> checked rather than argued.
+
+**R5 — where V4's `f`=516-over-affine preference actually comes from.** The
+56.6-nat return-leg gap is not diffuse: 49.5 nats sit in twelve frames, in two
+bursts (`src/r5_burst_diagnosis.py`; crops with both curves drawn in
+`out/figs/r5_burst_crops.png`):
+
+| burst | frames | what the pixels show |
+|---|---|---|
+| 1 | 824-843, t = 27.5-28.1 s | detection degraded: blob area 90-160 px against a 454 px norm, confidence down to 0.22, and two off-screen outliers (886 px and 440 px from the trend, frames 836-837) that `d2_clean` bridged. The observation stream is unreliable here; these ~35 nats say nothing about cameras. |
+| 2 | 855-869, t = 28.5-29.0 s | a genuine self-approach of the projected curve — the nearest-point `s` flips 142 -> 130 mm under both cameras — with the two projections straddling the track and crossing at frame ~864. A real motion-consistency signal through an ambiguity (~25 nats), but one 0.5 s crossing. |
+
+Neither is the junction episode (none of the top twelve frames falls in
+885-920; excluding it the gap is +70.7 nats). So the preference for `f`=516
+over affine is one degraded stretch plus one crossing. **V4's recommendation
+to promote `f`=516 to sole working camera rests on that, and should not.** The
+two are kept as the equal-weight family V4's own mixture already uses. The
+`f`=1298 rejection is unaffected: 256 nats outside the junction, and 53% of
+return frames individually agree with it.
+
+**R6 — three side checks** (`src/r6_side_checks.py`).
+
+- *V11's out-and-back regression, 0.25 -> 2.00 mm.* Uniform across the return
+  leg — 114 of 248 pairs above 2 mm, in 12 separate runs, not one episode — and
+  only weakly correlated with the transverse offset (r = +0.20), so the tube
+  degree of freedom is not the cause. V11's `s` is offset from V8's by a signed
+  -0.25 mm on the outbound leg and +0.50 mm on the return: a lag in the
+  direction of travel, consistent with the causal notch filter's group delay on
+  the observation, which the out-and-back comparison counts twice. One run
+  (frames 796-814, 6.9 mm) is a distinct commit error. A lag-compensated
+  readout would recover most of the rest. (Numbers are the radius-policy-C
+  re-run; the pre-C values were 119 pairs / 13 runs / r = +0.05.)
+- *V12's background motion.* Median 1.2-1.3 px on both legs, max 3.31 px, no
+  trend with time (r = -0.01), and a leg-to-leg mean offset of 0.02 px =
+  0.00 mm. It is frame-to-frame jitter, not drift: it does not bias the
+  calibration, contributes nothing to M1's held-out gap, and at 0.18 mm median
+  / 0.51 mm max sits inside the 0.78 mm statistical term already budgeted.
+- *`f`=516's intrinsics.* HFOV 85.8 deg, camera centre 78 mm above the phantom
+  looking straight down the CSV z-axis (view axis [0.08, 0.02, -0.997]), median
+  depth 89 mm — a wide lens at close range, plausible. The principal point
+  (347, 643), 39% of the frame below centre and 77 px from the bottom edge, is
+  not plausible for an uncropped sensor. But on a single near-flat curve the
+  principal point trades off against a small rotation and is not separately
+  identifiable, so the fitted value is an identifiability artefact, not a
+  physical claim about the lens; the same caveat covers `f`=1298's (348, 574).
+  One consequence matters for what follows: with the view axis along z, an
+  offset along z is an offset along the viewing ray — invisible in the image.
 
 ## S — the per-frame uncertainty, with the camera term included
 
@@ -1188,7 +1276,8 @@ model does follow the vasculature; the orange overlay made it look otherwise.
 
 1. **A new metric, and a fourth camera discriminator.** Anatomical plausibility
    is independent of every prior measure and of any camera's own fit, and it
-   ranks the family the same way R1/R2a did (`f`=1298 worst). Both masks should
+   ranks the family the same way R3 and Q2 do (`f`=1298 worst; R2a, cited
+   here originally, was later retracted). Both masks should
    be reported: orange-only is specific but blind to unfilled tubes, any-tube is
    complete but permissive (62% of the frame), and the truth for a given stretch
    is between them.
@@ -1313,87 +1402,176 @@ Combined with K1-K5, two distinct off-centerline models have now been rejected
 on this data. "The robot is on the centerline" remains the working assumption
 not because it is established, but because nothing proposed so far beats it.
 
+## R4 — a world-fixed direction offset (gravity / field gradient), tested and rejected
+
+Every off-centerline model before this defined its direction in a frame that
+travels with the curve — rotating (K1-K5), constant in the parallel-transport
+frame per leg (U1), locked to the Frenet normal (V1). None is a fixed direction
+in the phantom's own coordinates, and along Path 2 the transport frame turns
+132-664 deg relative to the CSV axes, so a fixed world direction is a genuinely
+different family. It is also the physically obvious one: a NdFeB-cored robot in
+water rests on the lowest wall, and a gradient-driven one is pulled toward the
+magnet. `src/r4_gravity_offset.py` fits `X(s) = C(s) + r g_perp(s)` — the
+direction of g (2 parameters) and r (1) — with V1's protocol unchanged: fit on
+the outbound leg by evidence, predict the return leg frozen, reverse transfer,
+Viterbi, the paired failure view. A screen over 400 directions at the baseline
+decode's own s-path ranks candidates before evidence is spent on the top three.
+Variant B lets the direction rotate +-alpha about the tube axis with the sign
+set by travel direction (a rolling body climbs the wall its rotation pushes it
+toward).
+
+| model | outbound med | RETURN med | ret >30 px | log Z |
+|---|---|---|---|---|
+| centerline (r=0) | **1.85** | **6.92** | 8.5% | -7714 |
+| world-fixed g, r = 2.0 mm (R4) | 2.79 | 7.59 | 7.3% | -7569 |
+| U1 constant, same wall | 3.46 | 5.50 | 7.3% | -7606 |
+| curvature-locked (V1) | 2.43 | 6.34 | 7.9% | -7639 |
+
+Rejected, on V1's three counts plus one of its own:
+
+1. **Reverse transfer fails.** Fitted on the return leg the direction lands
+   53 deg away from the forward fit ([-0.76, 0.48, 0.44] vs [-0.25, -0.03,
+   0.97]) and makes the outbound leg *five times worse* (1.85 -> 9.67 px). A
+   real fixed force is found from either leg.
+2. **Evidence and residual move in opposite directions** — +145 nats overall
+   while both legs' medians worsen (1.85 -> 2.79, 6.92 -> 7.59). U1's count-3
+   signature: the marginal likelihood gains from how mass is spread, not from a
+   better fit.
+3. **The junction is untouched**: episode 885-920 median 37.1 -> 35.8 px, max
+   44.3 -> 42.8; of the 39 centerline failures, 64% still fail. The tail rates
+   improve slightly (3.8 -> 3.2%, return 9.0 -> 7.6%), as V1's did — a broader
+   likelihood absorbing tails.
+4. **Variant B chooses alpha = 0.** No travel-direction dependence is
+   preferred; flipping the side on the return leg changes nothing.
+
+And a structural finding that applies to *any* gravity test on this data: the
+fitted direction is within 15 deg of +z, and the working cameras look straight
+down z (R6c). **A vertical offset is an offset along the viewing ray —
+invisible in the image.** Gravity specifically cannot be tested from this
+viewpoint; only an in-plane world direction (a field gradient, a tilted bench)
+could show, and the screen's best in-plane axis (-y) helps the return leg at
+the cost of the outbound. Whatever displaces the robot in the curved mid
+section and at the junction is not a fixed force in any frame tried —
+rotating, transported, curvature-locked, or world-fixed. Four families, four
+rejections. The displacement is real (T10, V6, V7); the tube model (V8)
+carries it as a latent state without describing it. That is the honest state:
+absorbed, not explained.
+
+## V8b — V8's junction gain, with the radius it never measured
+
+V13 found V8's `R_tube(s)` came from L1's width profile — sampled along the old
+c8_11 projection (the camera R3 rejects) and NaN on 142 of 761 samples, filled
+with the global median and clipped to 3-6 mm — and that neither that profile
+nor a re-measurement on the current projection has a valid two-sided width
+anywhere in the s = 109-119 mm junction. V8's "5.3 mm at the junction" was the
+imputed global median, at the one stretch where its headline gain is claimed.
+`src/v8b_tube_v13widths.py` re-runs V8's decoder under four radius profiles:
+
+| radius profile | junction R | med px | p90 | >30 px | RETURN med / >30 | episode 885-920 med / max | d at episode |
+|---|---|---|---|---|---|---|---|
+| axis-only (f=516) | - | 3.58 | 16.44 | 3.8% | 6.07 / 7.9% | 38.1 / 45.8 | - |
+| A: V8 as published (L1, imputed) | 5.30 (imputed) | 3.57 | 10.65 | 0.7% | 5.64 / 1.7% | 26.2 / 33.4 | -3.5 mm |
+| B: measured on f=516, gaps interpolated | 4.18 (interp.) | 3.44 | 10.57 | 1.3% | 5.51 / 2.3% | 25.0 / 31.4 | -2.8 mm |
+| **C: measured, gaps floored at 3.0 mm** | **3.00 (floor)** | **3.38** | **10.28** | **0.9%** | **5.43 / 1.1%** | **25.9 / 30.3** | -3.0 mm |
+| D: measured, gaps get no transverse freedom | 0.05 | 3.45 | 11.60 | 3.4% | 5.57 / 7.6% | 37.8 / 45.6 | -0.1 mm |
+
+Two things. **V8's gain does not depend on the imputed radius** — with the
+conservative 3 mm floor (C) the junction improves as much as under the
+invented 5.3 mm (max 30.3 vs 33.4 px) and the failure rate is 0.9%, because
+the offset the decoder needs there is ~3 mm, at the smallest plausible tube
+radius. V13's concern was right in principle and harmless in effect. **But
+some transverse freedom at the junction is essential** — D, which grants none
+where the image cannot measure, reverts to axis-only numbers (37.8 / 45.6 px,
+3.4% failures, 13.5% of frames pinned at the bound wanting more). Policy C is
+now V8's radius source: measured on the current projection where both tube
+edges are visible, 3.0 mm where they are not, nothing imputed from a median.
+V13's deeper point is unchanged — the junction radius is an assumption in
+every row, and the along-ray component of the offset is unobservable inside it.
+
 ## Honest status
 
-The estimator was never the limiting factor, and after Stages P-R it is not
-the largest uncertainty either. Current working configuration is **affine
-camera + Viterbi + `v_max`=60**: reprojection median 3.5 px, failure rate
-3.9%, held-out (return-leg) failure rate 9.3%, and 0.0% speed violations by
-construction.
+**Deliverable configuration.** Pinhole `f`=516, with the affine model kept as
+an equal-weight partner in the error bar rather than a rejected alternative
+(R5); tube-aware Viterbi decode (V8, radius policy C: measured on the current
+projection where both tube edges are visible, 3.0 mm floor where they are not,
+nothing imputed); `v_max`=60, sigma=9. Reprojection **3.38 px median / 10.28
+px p90, failure rate 0.9%, held-out return leg 5.43 px / 1.1%**, 0.0% speed
+violations by construction, out-and-back 0.25 mm. Online variant: V11 (0.40 s
+latency, 7.3 ms/frame, 1.07% failures). The 3D error bar is V4's camera-family `sigma_mix`
+(±0.98 mm median, ±2.61 mm p90), widened by V6's constraint-violation
+inflation where the observation contradicts the axis, and — where the tube
+offset is active — V13's conditional along-ray interval, which no single view
+closes.
 
-**On the camera ambiguity, which was the headline problem for most of this
-project.** Three mutually incompatible cameras fit the same 2D track, and no
-2D residual can choose between them (C7-C13, L2). Stage R broke that with two
-discriminators that do not grade a camera on its own projection: the
-per-camera size cue (R1) rejects the affine model at 3.8 sigma, showing real
-perspective exists in the scene; out-and-back arc-length agreement (R2a)
-rejects `f`=1298, the only model that ever labels one physical location two
-ways by more than 5 mm. With `f`=1298 dropped, the family's 3D spread falls
-from **3.25 mm to 0.37 mm median (p90 5.57 -> 2.37 mm)**. The residual
-camera ambiguity is now comparable to the estimator's own noise floor rather
-than 9x larger than it.
+**The camera question.** Three cameras fit the 2D track; no residual chooses.
+R1 rejects the affine model on physics (real perspective is measurable, 3.8
+sigma); R3's bug-immune held-out evidence rejects `f`=1298 by 266 nats,
+diffusely across the sequence; Q2's five columns agree. R2a's tail, the
+original reason, was a Viterbi-bug artefact and is retracted. What is left is
+`f`=516 vs affine — 0.37 mm median apart — and R5 shows the evidence
+"preference" between them is one degraded-detection stretch plus one
+self-crossing, so they stay a family. **Absolute position is uncertain by
+±0.4 mm median / ±2.3 mm p90 from the camera** — the same headline as before,
+on a corrected footing.
 
-That reframes the checkerboard from "the thing setting how wrong the answer
-could be" to "the thing that would let the last two candidates be checked
-instead of argued." Still the top ask, but for a smaller stake, and the
-project's central claim no longer depends on getting it.
+**The offset question.** The robot does leave the axis — by up to a tube
+diameter on the return pass through the junction (T10, V6, V7). Four smooth
+models of that displacement have been fitted and rejected on out-of-sample
+tests: rotating (K1-K5), constant per leg (U1), curvature-locked (V1),
+world-fixed direction (R4). Gravity in particular cannot be tested from this
+viewpoint, because it points along the viewing ray. The tube-aware decoder
+(V8) carries the displacement as a per-frame latent state and needs no
+invented radius to do it (V8b). Absorbed, not explained.
 
-Stage J changes the ordering of what to ask for. A second *simultaneous* view
-removes catastrophic tracking failures outright and needs only ~30 degrees of
-separation; a rotating single detector does not help at all. But biplane only
-improves calibration by ~3x, so it does not substitute for knowing the
-intrinsics.
+**The depth trade, stated once.** On the axis model, depth is the
+best-determined coordinate (0.12 mm, Stage F) and the model is wrong at the
+junction. On the tube model the anatomy is respected and the along-ray
+component of the offset is unobservable — bounded by a radius the image does
+not measure at the junction (V13, V8b). The deliverable takes the tube model
+and reports the interval. A second simultaneous view is what closes it.
 
-**The zero-data wins that survived.** Two of the three banked earlier did not
-(see Stage Q): I2's 2.4x offline-smoothing gain and I3's abstention rule were
-both artefacts of the mis-specified pinhole camera and are withdrawn. What
-holds up: **report the Viterbi path, not the causal posterior mean** — the
-mean can imply speeds up to 1442 mm/s at bimodal moments, worse than a
-memoryless nearest-point lookup, while Viterbi is exactly speed-bounded by
-construction (M2, confirmed under every camera in P0); **raise `v_max` from
-30 to 60 mm/s**, which cuts the held-out failure rate 25.7% -> 19.5% and the
-speed-violation rate 6.2% -> 2.1% (M3, P0); and **switch the camera from
-pinhole to affine for the tracking front end**, which more than halves the
-held-out failure rate, 19.8% -> 9.3% (P0). None of these needed new data.
+**What survived this round, and what did not.** Survived: Viterbi over the
+posterior mean (M2, every camera), `v_max`=60 (M3, P0), the tube-aware decode
+(V8, imputation-free per V8b), R3 as the camera discriminator, and every
+P/Q/V conclusion re-run after the Viterbi fix — P0, Q2, V3, V5, V6 unchanged.
+Retracted or demoted: R2a's verdict (bug artefact); V4's "promote `f`=516 to
+sole camera" (R5: twelve frames); V8's "5.3 mm at the junction" (never
+measured; 3.0 suffices). Found negligible: V12's background motion (jitter,
+0.00 mm leg-to-leg, R6b); V11's repeatability regression is a direction-of-
+travel lag in the causal front end, not the tube model (R6a).
+
+Stage J's ordering still holds for tracking: a second *simultaneous* view
+removes catastrophic failures at ~30 deg of separation and a rotating single
+detector does not help; biplane improves calibration only ~3x, so it does not
+substitute for knowing the intrinsics.
 
 To unblock, in order of value:
 
-1. **A checkerboard shot through the same optics.** Still first, but the case
-   changed in Stage R. It is no longer needed to bound a 3-4 mm systematic —
-   R1 and R2a already reduced that to 0.37 mm median by eliminating `f`=1298.
-   It is needed because the two surviving models are physically incompatible
-   in *kind*: R1 shows real perspective exists (rejecting the affine model at
-   3.8 sigma), yet the affine model is what tracks best, so the pipeline is
-   currently using a projection it has evidence against, and only an external
-   intrinsic can say what the physically-correct model that also tracks well
-   actually looks like. C10 confirmed a better solver cannot substitute.
-2. **The full 3D vessel geometry (STL or all-branch centerlines).** Lets the
-   whole vessel tree constrain the camera instead of a single curve, which is
-   what published 2D/3D roadmapping methods actually do.
-3. **A second simultaneous view**, if the hardware allows it. ~30 degrees of
-   separation is enough; orthogonal biplane adds little beyond that. Stage Q
-   *raised* this item's expected payoff back up: O1's original finding (that
-   failures avoid geometrically ambiguous zones, which had demoted it) reverses
-   under the corrected camera — remaining failures now concentrate in
-   self-intersection zones by 3.1x. Caveat: that reversal rests on 40 failures
-   split 12/28, and the attempted re-check of it in R2a used an invalid
-   self-intersection proxy, so the evidence here is thinner than the other
-   items and worth re-establishing on a proper multiplicity measure.
-4. **A direct view of the robot body (deprioritised).** Vessel-diameter data
-   was previously listed here to turn the D3 wobble into a modelled radial
-   offset. K2-K4 found no evidence for that offset on real data — the wobble
-   looks like a rolling-silhouette artefact instead (K4). K5 tried to dodge it
-   on the detection side alone (track the blob's axis-midpoint instead of its
-   centroid) at zero data cost, and it made no difference — the outline's
-   extent moves, not just the mass within it, so any real fix needs a view
-   that resolves the robot's cross-section, not vessel diameters and not a
-   cleverer 2D feature.
+1. **A checkerboard shot through the same optics.** The remaining camera pair
+   is 0.37 mm apart; a calibration shot would say which, and would turn the
+   principal-point question (R6c: 39% of the frame below centre, not
+   separable from a rotation on one curve) from an identifiability artefact
+   into a physical fact. A smaller stake than it was; still the cheapest
+   single action. C10 confirmed a better solver cannot substitute.
+2. **The lumen surface (STL), or at least tube diameters.** The junction
+   radius that bounds the deliverable's transverse offset is an assumption
+   (V8b: 3.0 mm floor, never measured). A surface makes it a measurement, and
+   is what V13's conditional along-ray interval needs to become a bounded one.
+   The whole vessel tree would also constrain the camera instead of one curve.
+3. **A second simultaneous view.** V3 showed it targets none of the remaining
+   *2D* failures (0 strict branch-selection errors of 39). Its value moved: it
+   is the only observation that resolves the along-ray depth of the tube
+   offset (V13), which is now the largest stated uncertainty in the
+   deliverable. Re-ranked for a different reason, not demoted. ~30 deg of
+   separation suffices (J1).
+4. **The robot's dimensions.** Fixes the offset magnitude (R_tube - r_robot),
+   enables the roll-slip cross-check that is still blocked, and would let the
+   size cue (R1) be read absolutely instead of comparatively.
 
-Also worth carrying forward, independent of new hardware: **M1's out-of-sample
-gap (calibration-set 4.4-4.7 px vs held-out return-leg 11-13 px, a real 2.4-2.9x)
-is the number to quote for expected accuracy on unseen data**, not the
-calibration-set residual C reports — a distinction this project did not
-previously draw.
+Also, independent of new hardware: the held-out return-leg numbers under the
+deliverable (**5.43 px / 1.1%**) are what to quote for expected accuracy on
+unseen data, not the calibration-set residual — a distinction M1 first drew and
+that survives every change since.
 
 ## What changes for real fluoroscopy
 
